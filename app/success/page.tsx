@@ -1,12 +1,14 @@
 import Link from "next/link";
+import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { formatDateTime } from "@/lib/certificate";
 import { ensureCertificate } from "@/lib/issue";
 import { sendCertificateEmail } from "@/lib/email";
-import { writeSessionPointer } from "@/lib/certificate";
 
 // Always render fresh — payment status is verified on each request.
 export const dynamic = "force-dynamic";
+// pdfkit needs the Node runtime (filesystem-backed font data); not the Edge one.
+export const runtime = "nodejs";
 
 interface SuccessPageProps {
   searchParams: { session_id?: string };
@@ -26,7 +28,7 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
   let session: Awaited<ReturnType<typeof stripe.checkout.sessions.retrieve>>;
   try {
     session = await stripe.checkout.sessions.retrieve(sessionId, {
-      expand: ["customer_details"],
+      expand: ["customer_details", "payment_intent"],
     });
   } catch (err) {
     console.error("Failed to retrieve checkout session:", err);
@@ -58,14 +60,23 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
     session.customer_email ??
     "unknown@example.com";
 
-  // Idempotently issue the certificate (deterministic dates, dedup by session).
-  const { pointer, pdfPath, data } = await ensureCertificate(session);
+  // Issue the certificate (deterministic numbers + dates, PDF rendered in memory).
+  const { certificateNumber, policyNumber, data, pdf } =
+    await ensureCertificate(session);
 
-  // Email it the first time only.
-  let emailNote = pointer.emailed
+  // We email once. Because the filesystem is ephemeral on serverless, the
+  // "already emailed" flag lives on the PaymentIntent metadata, which persists
+  // across requests so refreshing /success doesn't re-send.
+  const paymentIntent =
+    typeof session.payment_intent === "string"
+      ? null
+      : (session.payment_intent as Stripe.PaymentIntent | null);
+  const alreadyEmailed = paymentIntent?.metadata?.certificateEmailed === "true";
+
+  let emailNote = alreadyEmailed
     ? `Your certificate was emailed to ${email}.`
     : "";
-  if (!pointer.emailed) {
+  if (!alreadyEmailed) {
     try {
       await sendCertificateEmail({
         to: email,
@@ -74,11 +85,15 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
         planName: m.planName ?? "Temporary Cover",
         effectiveDate: formatDateTime(data.effectiveDate),
         expiryDate: formatDateTime(data.expiryDate),
-        certificateNumber: pointer.certificateNumber,
-        policyNumber: pointer.policyNumber,
-        pdfPath,
+        certificateNumber,
+        policyNumber,
+        pdf,
       });
-      writeSessionPointer(sessionId, { ...pointer, emailed: true });
+      if (paymentIntent) {
+        await stripe.paymentIntents.update(paymentIntent.id, {
+          metadata: { ...paymentIntent.metadata, certificateEmailed: "true" },
+        });
+      }
       emailNote = `Your certificate has been emailed to ${email}.`;
     } catch (err) {
       console.error("Failed to email certificate:", err);
@@ -92,7 +107,7 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
   const vehicleLine = `${m.vrm ?? ""}${m.make ? ` · ${m.make}` : ""}${
     m.model ? ` ${m.model}` : ""
   }`;
-  const emailOk = pointer.emailed || emailNote.startsWith("Your certificate");
+  const emailOk = alreadyEmailed || emailNote.startsWith("Your certificate");
 
   return (
     <Panel title="You're covered 🎉" icon>
@@ -103,8 +118,8 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
       <div className="summary">
         <Row k="Vehicle" v={vehicleLine} />
         <Row k="Plan" v={m.planName ?? "—"} />
-        <Row k="Certificate no." v={pointer.certificateNumber} />
-        <Row k="Policy no." v={pointer.policyNumber} />
+        <Row k="Certificate no." v={certificateNumber} />
+        <Row k="Policy no." v={policyNumber} />
         <Row k="Effective" v={formatDateTime(data.effectiveDate)} />
         <Row k="Expires" v={formatDateTime(data.expiryDate)} />
       </div>

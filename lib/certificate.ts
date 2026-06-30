@@ -1,8 +1,4 @@
-import fs from "node:fs";
-import path from "node:path";
 import PDFDocument from "pdfkit";
-
-export const CERTIFICATES_DIR = path.join(process.cwd(), "certificates");
 
 export interface CertificateData {
   certificateNumber: string;
@@ -81,68 +77,29 @@ export function formatIssued(d: Date): string {
   });
 }
 
-export function certificatePath(certificateNumber: string): string {
-  const safe = certificateNumber.replace(/[^a-zA-Z0-9_-]/g, "");
-  return path.join(CERTIFICATES_DIR, `${safe}.pdf`);
-}
-
-export function certificateExists(certificateNumber: string): boolean {
-  return fs.existsSync(certificatePath(certificateNumber));
-}
-
-// To guard against double-generation when the user refreshes /success, we write
-// a small pointer keyed by the Stripe session id recording which certificate
-// was issued. On refresh we reuse it instead of generating + emailing again.
-export interface SessionPointer {
-  certificateNumber: string;
-  policyNumber: string;
-  emailed: boolean;
-}
-
-function pointerPath(sessionId: string): string {
-  const safe = sessionId.replace(/[^a-zA-Z0-9_-]/g, "");
-  return path.join(CERTIFICATES_DIR, `session-${safe}.json`);
-}
-
-export function readSessionPointer(sessionId: string): SessionPointer | null {
-  try {
-    const raw = fs.readFileSync(pointerPath(sessionId), "utf8");
-    return JSON.parse(raw) as SessionPointer;
-  } catch {
-    return null;
-  }
-}
-
-export function writeSessionPointer(
-  sessionId: string,
-  pointer: SessionPointer
-): void {
-  fs.mkdirSync(CERTIFICATES_DIR, { recursive: true });
-  fs.writeFileSync(pointerPath(sessionId), JSON.stringify(pointer, null, 2));
-}
-
 const LEFT = 50;
 const RIGHT = 545;
 const WIDTH = RIGHT - LEFT; // 495
 
 /**
- * Render the certificate PDF and write it to /certificates. Resolves with the
- * file path once fully flushed to disk.
+ * Render the certificate PDF entirely in memory and resolve with the bytes.
+ *
+ * We deliberately avoid touching the filesystem: on serverless hosts (Vercel)
+ * the project directory is read-only and `/tmp` is not shared across function
+ * invocations, so streaming the bytes back to the caller is both portable and
+ * lets the browser save the file straight to the user's Downloads folder
+ * (works the same on desktop and mobile).
  */
 export function generateCertificatePdf(
   data: CertificateData
-): Promise<string> {
+): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    fs.mkdirSync(CERTIFICATES_DIR, { recursive: true });
-
-    const filePath = certificatePath(data.certificateNumber);
     const doc = new PDFDocument({ size: "A4", margin: 50 });
-    const stream = fs.createWriteStream(filePath);
+    const chunks: Buffer[] = [];
 
-    stream.on("finish", () => resolve(filePath));
-    stream.on("error", reject);
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
-    doc.pipe(stream);
 
     // ---- Header band ------------------------------------------------------
     const headerH = 92;
@@ -381,18 +338,33 @@ export function generateCertificatePdf(
   });
 }
 
-/** Generate a policy number like TD-NV19WMK-ALOPNP (6 uppercase letters). */
-export function makePolicyNumber(vrmCompact: string): string {
+/**
+ * Deterministic 32-bit FNV-1a hash of a string. Used to derive stable policy
+ * and certificate numbers from the Stripe session id so that every request for
+ * the same session (success page, refresh, download, email) produces identical
+ * numbers — no shared storage required.
+ */
+function hashSeed(seed: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+/** Deterministic policy number like TD-NV19WMK-ALOPNP (6 uppercase letters). */
+export function makePolicyNumber(vrmCompact: string, seed: string): string {
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   let suffix = "";
   for (let i = 0; i < 6; i++) {
-    suffix += letters[Math.floor(Math.random() * letters.length)];
+    suffix += letters[hashSeed(`policy:${seed}:${i}`) % letters.length];
   }
   return `TD-${vrmCompact}-${suffix}`;
 }
 
-/** Generate a certificate number like TDV373691 (6 digits). */
-export function makeCertificateNumber(): string {
-  const n = 100000 + Math.floor(Math.random() * 900000);
+/** Deterministic certificate number like TDV373691 (6 digits). */
+export function makeCertificateNumber(seed: string): string {
+  const n = 100000 + (hashSeed(`cert:${seed}`) % 900000);
   return `TDV${n}`;
 }

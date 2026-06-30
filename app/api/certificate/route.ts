@@ -1,9 +1,10 @@
-import fs from "node:fs";
 import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { ensureCertificate } from "@/lib/issue";
 
 export const dynamic = "force-dynamic";
+// pdfkit needs the Node runtime (filesystem-backed font data); not the Edge one.
+export const runtime = "nodejs";
 
 /**
  * Stream the certificate PDF for a paid Checkout Session as a download.
@@ -32,14 +33,15 @@ export async function GET(request: Request) {
     );
   }
 
-  const { pointer, pdfPath } = await ensureCertificate(session);
-  const pdf = fs.readFileSync(pdfPath);
+  const { certificateNumber, pdf } = await ensureCertificate(session);
+  const body = Uint8Array.from(pdf);
 
-  return new NextResponse(pdf, {
+  return new NextResponse(body, {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${pointer.certificateNumber}.pdf"`,
+      "Content-Disposition": `attachment; filename="${certificateNumber}.pdf"`,
+      "Content-Length": String(pdf.length),
       "Cache-Control": "no-store",
     },
   });

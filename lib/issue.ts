@@ -1,34 +1,28 @@
 import type Stripe from "stripe";
 import {
-  certificateExists,
-  certificatePath,
   generateCertificatePdf,
   makeCertificateNumber,
   makePolicyNumber,
-  readSessionPointer,
-  writeSessionPointer,
   type CertificateData,
-  type SessionPointer,
 } from "./certificate";
 
 export interface IssuedCertificate {
-  pointer: SessionPointer;
+  certificateNumber: string;
+  policyNumber: string;
   data: CertificateData;
-  pdfPath: string;
-  /** true if this call created the pointer (first time the cert was issued) */
-  newlyIssued: boolean;
+  /** The rendered certificate PDF bytes, ready to stream or email. */
+  pdf: Buffer;
 }
 
 /**
- * Idempotently issue the certificate for a (paid) Checkout Session:
- *  - cover dates are derived deterministically from the session creation time,
- *    so they're identical on every request (success page, refresh, download);
- *  - the policy/certificate numbers are generated once and remembered via a
- *    per-session pointer file;
- *  - the PDF is (re)generated only if it's not already on disk.
+ * Build the certificate for a (paid) Checkout Session and render its PDF.
  *
- * This makes both the success page and the download route self-sufficient,
- * even on an ephemeral filesystem.
+ * Everything is derived deterministically from the session, so this is fully
+ * stateless and safe on an ephemeral / read-only serverless filesystem:
+ *  - cover dates come from the session creation time;
+ *  - the policy/certificate numbers are seeded from the session id, so they're
+ *    identical on every request (success page, refresh, download, email);
+ *  - the PDF is rendered in memory each call — no disk writes.
  */
 export async function ensureCertificate(
   session: Stripe.Checkout.Session
@@ -41,22 +35,13 @@ export async function ensureCertificate(
   const expiryDate = new Date(created.getTime() + durationHours * 3600_000);
   const issuedDate = created;
 
-  let pointer = readSessionPointer(session.id);
-  let newlyIssued = false;
-  if (!pointer) {
-    const vrmCompact = m.vrmCompact || (m.vrm ?? "").replace(/\s+/g, "");
-    pointer = {
-      certificateNumber: makeCertificateNumber(),
-      policyNumber: makePolicyNumber(vrmCompact),
-      emailed: false,
-    };
-    writeSessionPointer(session.id, pointer);
-    newlyIssued = true;
-  }
+  const vrmCompact = m.vrmCompact || (m.vrm ?? "").replace(/\s+/g, "");
+  const certificateNumber = makeCertificateNumber(session.id);
+  const policyNumber = makePolicyNumber(vrmCompact, session.id);
 
   const data: CertificateData = {
-    certificateNumber: pointer.certificateNumber,
-    policyNumber: pointer.policyNumber,
+    certificateNumber,
+    policyNumber,
     registrationMark: m.vrm ?? "",
     policyholderName: m.policyholderName ?? "Policyholder",
     make: m.make ?? "",
@@ -69,10 +54,7 @@ export async function ensureCertificate(
     issuedDate,
   };
 
-  const pdfPath = certificatePath(pointer.certificateNumber);
-  if (!certificateExists(pointer.certificateNumber)) {
-    await generateCertificatePdf(data);
-  }
+  const pdf = await generateCertificatePdf(data);
 
-  return { pointer, data, pdfPath, newlyIssued };
+  return { certificateNumber, policyNumber, data, pdf };
 }

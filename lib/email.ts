@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import { Resend } from "resend";
 
 let _resend: Resend | null = null;
@@ -26,8 +25,8 @@ export interface CertificateEmailParams {
   expiryDate: string;
   certificateNumber: string;
   policyNumber: string;
-  /** absolute path to the generated PDF */
-  pdfPath: string;
+  /** the rendered certificate PDF bytes */
+  pdf: Buffer;
 }
 
 /**
@@ -44,7 +43,6 @@ export async function sendCertificateEmail(
     );
   }
 
-  const pdf = fs.readFileSync(params.pdfPath);
   const filename = `${params.certificateNumber}.pdf`;
 
   const text = [
@@ -67,7 +65,7 @@ export async function sendCertificateEmail(
     to: params.to,
     subject: `Your TempDrive certificate (DEMO) — ${params.registrationMark}`,
     text,
-    attachments: [{ filename, content: pdf }],
+    attachments: [{ filename, content: params.pdf }],
   });
 
   if (error) {
