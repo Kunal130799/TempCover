@@ -31,8 +31,14 @@ export async function ensureCertificate(
   const durationHours = Number(m.planDurationHours ?? "24") || 24;
 
   const created = new Date((session.created ?? 0) * 1000);
-  const effectiveDate = created;
-  const expiryDate = new Date(created.getTime() + durationHours * 3600_000);
+  // Cover starts immediately (at purchase time) unless the customer picked a
+  // specific future date (stored as YYYY-MM-DD, cover begins 00:00 that day).
+  const coverStart = m.coverStart ?? "immediate";
+  const isFutureDate = /^\d{4}-\d{2}-\d{2}$/.test(coverStart);
+  const effectiveDate = isFutureDate
+    ? new Date(`${coverStart}T00:00:00`)
+    : created;
+  const expiryDate = new Date(effectiveDate.getTime() + durationHours * 3600_000);
   const issuedDate = created;
 
   const vrmCompact = m.vrmCompact || (m.vrm ?? "").replace(/\s+/g, "");

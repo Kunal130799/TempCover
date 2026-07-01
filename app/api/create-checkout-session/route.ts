@@ -1,20 +1,36 @@
 import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
-import { getPlan } from "@/lib/plans";
+import {
+  clampDuration,
+  durationHoursFor,
+  durationLabel,
+  isDurationUnit,
+  priceFor,
+} from "@/lib/plans";
 import { compactVrm, formatVrm } from "@/lib/vehicle";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { planId, email, policyholderName, vehicle } = body ?? {};
+    const {
+      email,
+      phone,
+      policyholderName,
+      vehicle,
+      durationUnit,
+      durationValue,
+      coverStart,
+      driver,
+      reasonForCover,
+    } = body ?? {};
 
-    const plan = getPlan(planId);
-    if (!plan) {
+    if (!isDurationUnit(durationUnit)) {
       return NextResponse.json(
-        { error: "Please choose a valid cover plan." },
+        { error: "Please choose how long you need cover for." },
         { status: 400 }
       );
     }
+    const value = clampDuration(durationUnit, Number(durationValue));
 
     if (!email || typeof email !== "string" || !email.includes("@")) {
       return NextResponse.json(
@@ -38,6 +54,16 @@ export async function POST(request: Request) {
       );
     }
 
+    const priceInPence = priceFor(durationUnit, value);
+    const label = durationLabel(durationUnit, value);
+    const planName = `${label.charAt(0).toUpperCase()}${label.slice(1)} cover`;
+
+    // "immediate" or an ISO date string (YYYY-MM-DD) chosen by the customer.
+    const coverStartMeta =
+      typeof coverStart === "string" && /^\d{4}-\d{2}-\d{2}$/.test(coverStart)
+        ? coverStart
+        : "immediate";
+
     const origin =
       request.headers.get("origin") ??
       process.env.NEXT_PUBLIC_BASE_URL ??
@@ -54,9 +80,14 @@ export async function POST(request: Request) {
       fuelType: String(vehicle?.fuelType ?? ""),
       year: String(vehicle?.year ?? ""),
       policyholderName: policyholderName.trim().slice(0, 200),
-      planId: plan.id,
-      planName: plan.name,
-      planDurationHours: String(plan.durationHours),
+      phone: String(phone ?? "").slice(0, 40),
+      planName,
+      durationUnit,
+      durationValue: String(value),
+      planDurationHours: String(durationHoursFor(durationUnit, value)),
+      coverStart: coverStartMeta,
+      driverLicenceType: String(driver?.licenceType ?? "").slice(0, 60),
+      reasonForCover: String(reasonForCover ?? "").slice(0, 80),
       motStatus: String(vehicle?.motStatus ?? ""),
       motDueDate: String(vehicle?.motDueDate ?? ""),
       taxStatus: String(vehicle?.taxStatus ?? ""),
@@ -71,10 +102,10 @@ export async function POST(request: Request) {
           quantity: 1,
           price_data: {
             currency: "gbp",
-            unit_amount: plan.priceInPence,
+            unit_amount: priceInPence,
             product_data: {
-              name: `TempDrive ${plan.name} (DEMO)`,
-              description: `Temporary cover for ${metadata.vrm} — ${plan.blurb}`,
+              name: `TempDrive ${planName}`,
+              description: `Temporary cover for ${metadata.vrm} — ${label}`,
             },
           },
         },

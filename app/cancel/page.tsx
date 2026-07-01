@@ -2,7 +2,8 @@ import Link from "next/link";
 
 export default function CancelPage() {
   return (
-    <div className="card" style={{ marginTop: 8 }}>
+    <div className="narrow">
+      <div className="card">
       <h2 style={{ fontSize: 22 }}>Checkout cancelled</h2>
       <p className="muted">
         Your payment was cancelled and you have not been charged. No certificate
@@ -16,6 +17,7 @@ export default function CancelPage() {
         >
           Back to start
         </Link>
+      </div>
       </div>
     </div>
   );

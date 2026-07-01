@@ -1,24 +1,21 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { SiteHeader, SiteFooter } from "./site-chrome";
 
 export const metadata: Metadata = {
-  title: "TempDrive (DEMO) — Temporary motor insurance",
+  title: "TempDrive — Temporary car & van insurance from 1 hour to 28 days",
   description:
-    "Proof-of-concept temporary insurance flow: vehicle lookup → plan → Stripe Checkout → emailed PDF certificate. Demo only, not real cover.",
+    "Quick and easy temporary vehicle insurance. Get affordable short-term cover in minutes — enter your reg, choose your duration and get covered.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        {/* Persistent, prominent disclaimer on every page. This mimics a real
-            regulated product, so the demo nature must never be buried. */}
-        <div className="demo-banner">
-          <strong>DEMO ONLY</strong> — proof-of-concept. No real insurance cover
-          is provided and any certificate issued has no legal standing.
-        </div>
-        <div className="shell">{children}</div>
+        <SiteHeader />
+        <main className="site-main">{children}</main>
+        <SiteFooter />
       </body>
     </html>
   );

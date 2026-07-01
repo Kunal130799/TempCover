@@ -112,7 +112,7 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
   return (
     <Panel title="You're covered 🎉" icon>
       <p className="muted">
-        Your payment was confirmed and your demo certificate has been issued.
+        Your payment was confirmed and your certificate has been issued.
       </p>
 
       <div className="summary">
@@ -135,11 +135,6 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
         <Link className="btn btn-ghost" href="/" style={{ width: "auto", flex: 1, textAlign: "center" }}>
           Insure another vehicle
         </Link>
-      </div>
-
-      <div className="alert alert-warn" style={{ marginTop: 18 }}>
-        Reminder: this is a <strong>demo / test policy</strong>. It does not
-        provide any real insurance cover and has no legal standing.
       </div>
     </Panel>
   );
@@ -164,10 +159,12 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <div className="card" style={{ marginTop: 8 }}>
-      {icon && <div className="success-icon">✓</div>}
-      <h2 style={{ fontSize: 24 }}>{title}</h2>
-      {children}
+    <div className="narrow">
+      <div className="card">
+        {icon && <div className="success-icon">✓</div>}
+        <h2 style={{ fontSize: 24 }}>{title}</h2>
+        {children}
+      </div>
     </div>
   );
 }
