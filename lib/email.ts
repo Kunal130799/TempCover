@@ -55,15 +55,15 @@ export async function sendCertificateEmail(
     `Policy no: ${params.policyNumber}`,
     `Cert no:   ${params.certificateNumber}`,
     "",
-    "IMPORTANT: This is a DEMO / TEST policy generated for a proof-of-concept application. It does NOT provide any real insurance cover and has no legal standing. Do not rely on it to drive any vehicle.",
+    "Please keep this certificate safe. Refer to the policy wording and schedule for full details of your cover.",
     "",
-    "— TempDrive (demo)",
+    "— TempDrive",
   ].join("\n");
 
   const { data, error } = await getResend().emails.send({
     from,
     to: params.to,
-    subject: `Your TempDrive certificate (DEMO) — ${params.registrationMark}`,
+    subject: `Your TempDrive certificate — ${params.registrationMark}`,
     text,
     attachments: [{ filename, content: params.pdf }],
   });

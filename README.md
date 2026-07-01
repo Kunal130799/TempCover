@@ -7,14 +7,28 @@
 > of it is authentic. A prominent disclaimer banner is shown on every page.
 
 A minimal Next.js (App Router, TypeScript) app demonstrating the full
-**vehicle lookup → pick a plan → pay → emailed PDF certificate** flow:
+**quote → enter details → pay → emailed PDF certificate** flow, with a UI and
+journey modelled on a real temporary-insurance provider (see
+`phase3-tempcover-redesign.md`):
 
-1. Enter a vehicle registration (VRM) → details are fetched from an external
-   vehicle data API.
-2. Pick a demo cover plan and enter policyholder name + email.
-3. Pay via **Stripe Checkout** (test mode).
-4. On confirmed payment, a branded **PDF certificate** is generated with
+1. **Start** — marketing hero with a UK number-plate reg input, quick-pick
+   durations (1 day / 2 days / 1 week) and a Hours / Days / Weeks picker.
+   Continuing fetches vehicle details from an external vehicle data API.
+2. **Account** — a "sign in or create an account" gate. Auth is not part of the
+   demo, so every option (including **Continue as guest**) proceeds the same way.
+3. **Details** — one long form: contact (phone + email), the vehicle to be
+   covered, cover details (duration + start date), driver details (licence type,
+   title, name, DOB, postcode) and reason for cover, with inline validation.
+4. **Quote** — a summary card with the price computed from the duration, then
+   pay via **Stripe Checkout** (test mode).
+5. On confirmed payment, a branded **PDF certificate** is generated with
    `pdfkit` and **emailed** to the policyholder via **Resend**.
+
+Pricing is a small **rate card** (`lib/plans.ts`): a per-hour / per-day /
+per-week pence rate × the chosen quantity, so any duration produces a price
+(replacing the earlier three fixed plans). The chosen start ("Immediately" or a
+future date) becomes the certificate's effective date; expiry = effective +
+duration.
 
 Payment is verified _synchronously_ on the success page — **no webhooks**. When
 the customer returns to `/success`, the server retrieves the Checkout Session
@@ -24,9 +38,9 @@ generated to `certificates/` and emailed.
 ## How it works
 
 ```
-/ (VRM lookup) ─POST─▶ /api/vehicle-lookup ─▶ checkcardetails.co.uk
-        │                                       (VEHICLE_API_KEY, server-side)
-   pick plan + name/email
+/ (start: reg + duration) ─POST─▶ /api/vehicle-lookup ─▶ checkcardetails.co.uk
+        │                                                  (VEHICLE_API_KEY, server-side)
+   account gate → enter details (contact, cover, driver) → quote
         │
         └─POST─▶ /api/create-checkout-session ─▶ Stripe Checkout (hosted)
                                                       │  pay with test card
@@ -79,7 +93,8 @@ RESEND_API_KEY=re_...
 RESEND_FROM_EMAIL=TempDrive Demo <onboarding@resend.dev>
 ```
 
-Open <http://localhost:3000>, look up a registration, choose a plan, and pay.
+Open <http://localhost:3000>, enter a registration and duration, work through the
+details form, and pay.
 
 ### Test card
 
@@ -129,8 +144,12 @@ synchronously on the success page.
   `checkout.session.completed`.
 - **Not real insurance** — issuing real cover requires an actual,
   FCA-regulated underwriting process. This only mimics the *document format*.
-- **Hardcoded demo plans** — the three plans are fixed in `lib/plans.ts`, not
-  produced by a real rating engine.
+- **Hardcoded demo rate card** — pricing is a fixed per-unit rate card in
+  `lib/plans.ts`, not produced by a real rating engine.
+- **No real accounts / auth** — the "sign in or create an account" screen is
+  decorative; every option continues as a guest.
+- **Stubbed address lookup** — the driver "Find address" button is a stub; enter
+  the postcode manually. Driver details are collected but not otherwise verified.
 - **No delivery guarantees** — "emailed" means Resend accepted the request; the
   app doesn't verify the email or PDF actually arrived.
 - **Test keys only** — built for Stripe test mode.
@@ -140,9 +159,9 @@ synchronously on the success page.
 
 ```
 app/
-  page.tsx                              # VRM lookup + plan selection (client)
+  page.tsx                              # multi-step journey: start → account → details → quote (client)
   layout.tsx                            # shell + persistent DEMO banner
-  globals.css                           # design system / modern UI styles
+  globals.css                           # design system (Tempcover-style orange theme)
   api/vehicle-lookup/route.ts           # server-side vehicle data lookup
   api/create-checkout-session/route.ts  # creates the Stripe Checkout Session
   api/certificate/route.ts              # streams the cert PDF for download
@@ -150,7 +169,7 @@ app/
   cancel/page.tsx                       # cancelled message
 lib/
   stripe.ts          # lazy Stripe client
-  plans.ts           # demo cover plans
+  plans.ts           # demo pricing rate card + duration helpers
   vehicle.ts         # vehicle types + VRM helpers + response parser
   certificate.ts     # PDF certificate generation (pdfkit) + session dedup
   issue.ts           # idempotent cert issuance shared by /success and download
