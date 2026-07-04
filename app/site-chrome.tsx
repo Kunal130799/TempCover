@@ -16,7 +16,7 @@ export function SiteHeader() {
     <header className="nav">
       <div className="nav-inner">
         <a className="wordmark" href="/">
-          tempdrive
+          Short Drive
         </a>
 
         <nav className="nav-links">
@@ -65,7 +65,7 @@ export function SiteFooter() {
       <div className="footer-inner">
         <div className="footer-top">
           <a className="wordmark" href="/">
-            tempdrive
+            Short Drive
           </a>
           <div className="store-badges">
             <span className="store-badge">↧ App Store</span>
@@ -107,9 +107,9 @@ export function SiteFooter() {
         </div>
 
         <p className="footer-legal">
-          tempdrive is a trading name of TempDrive Insurance Services Ltd,
+          Short Drive is a trading name of Short Drive Insurance Services Ltd,
           registered in England and Wales. Authorised and regulated by the
-          Financial Conduct Authority. © 2026 TempDrive Insurance Services Ltd.
+          Financial Conduct Authority. © 2026 Short Drive Insurance Services Ltd.
         </p>
       </div>
     </footer>
