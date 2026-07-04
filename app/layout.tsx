@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { SiteHeader, SiteFooter } from "./site-chrome";
 
 export const metadata: Metadata = {
-  title: "TempDrive — Temporary car & van insurance from 1 hour to 28 days",
+  title: "Short Drive — Temporary car & van insurance from 1 hour to 28 days",
   description:
     "Quick and easy temporary vehicle insurance. Get affordable short-term cover in minutes — enter your reg, choose your duration and get covered.",
 };
